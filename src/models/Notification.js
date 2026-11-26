@@ -8,4 +8,6 @@ const notificationSchema = new mongoose.Schema({
   read: { type: Boolean, default: false }
 }, { timestamps: true });
 
+notificationSchema.index({ toEmail: 1, time: -1 });
+
 module.exports = mongoose.model("Notification", notificationSchema);
