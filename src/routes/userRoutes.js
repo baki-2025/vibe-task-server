@@ -3,19 +3,24 @@ const User = require("../models/User");
 const { authenticate, requireRole } = require("../middleware/auth");
 
 const router = express.Router();
+
+router.get("/top-workers", async (req, res, next) => {
+  try {
+    const workers = await User.find({ role: "worker" })
+      .select("name photoURL coin")
+      .sort({ coin: -1 })
+      .limit(6)
+      .lean();
+    res.json(workers);
+  } catch (error) { next(error); }
+});
+
 router.use(authenticate);
 
 router.get("/", requireRole("admin"), async (req, res, next) => {
   try {
     const users = await User.find().sort({ createdAt: -1 });
     res.json(users);
-  } catch (error) { next(error); }
-});
-
-router.get("/top-workers", async (req, res, next) => {
-  try {
-    const workers = await User.find({ role: "worker" }).sort({ coin: -1 }).limit(6);
-    res.json(workers);
   } catch (error) { next(error); }
 });
 

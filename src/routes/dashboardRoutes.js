@@ -4,12 +4,12 @@ const Submission = require("../models/Submission");
 const Payment = require("../models/Payment");
 const User = require("../models/User");
 const Withdrawal = require("../models/Withdrawal");
-const { authenticate } = require("../middleware/auth");
+const { authenticate, requireRole } = require("../middleware/auth");
 
 const router = express.Router();
 router.use(authenticate);
 
-router.get("/buyer", async (req, res, next) => {
+router.get("/buyer", requireRole("buyer"), async (req, res, next) => {
   try {
     const [taskCount, tasks, paid, submissions] = await Promise.all([
       Task.countDocuments({ buyer_email: req.user.email }),
@@ -30,7 +30,7 @@ router.get("/buyer", async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-router.get("/worker", async (req, res, next) => {
+router.get("/worker", requireRole("worker"), async (req, res, next) => {
   try {
     const [totalSubmission, pendingSubmission, approvedSubmissions] = await Promise.all([
       Submission.countDocuments({ worker_email: req.user.email }),
@@ -42,9 +42,8 @@ router.get("/worker", async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-router.get("/admin", async (req, res, next) => {
+router.get("/admin", requireRole("admin"), async (req, res, next) => {
   try {
-    if (req.user.role !== "admin") return res.status(403).json({ message: "Forbidden" });
     const [workers, buyers, coins, payments, withdrawals] = await Promise.all([
       User.countDocuments({ role: "worker" }),
       User.countDocuments({ role: "buyer" }),
