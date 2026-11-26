@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema({
   photoURL: { type: String, default: "" },
   role: { type: String, enum: ["worker", "buyer", "admin"], default: "worker" },
   coin: { type: Number, default: 10, min: 0 },
+  passwordHash: { type: String, select: false },
   firebaseUid: { type: String, default: "" }
 }, { timestamps: true });
 
