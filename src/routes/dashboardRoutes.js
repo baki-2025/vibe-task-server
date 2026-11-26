@@ -48,14 +48,17 @@ router.get("/admin", requireRole("admin"), async (req, res, next) => {
       User.countDocuments({ role: "worker" }),
       User.countDocuments({ role: "buyer" }),
       User.aggregate([{ $group: { _id: null, total: { $sum: "$coin" } } }]),
-      Payment.countDocuments({ status: "completed" }),
+      Payment.aggregate([
+        { $match: { status: "completed" } },
+        { $group: { _id: null, total: { $sum: "$amount" } } }
+      ]),
       Withdrawal.find({ status: "pending" }).sort({ createdAt: -1 })
     ]);
     res.json({
       totalWorker: workers,
       totalBuyer: buyers,
       totalAvailableCoin: coins[0]?.total || 0,
-      totalPayment: payments,
+      totalPayment: payments[0]?.total || 0,
       pendingWithdrawals: withdrawals
     });
   } catch (error) { next(error); }
