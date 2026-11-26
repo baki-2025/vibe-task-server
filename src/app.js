@@ -4,6 +4,7 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const User = require("./models/User");
 const Payment = require("./models/Payment");
+const { findPaymentPackage } = require("./utils/paymentPackages");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const taskRoutes = require("./routes/taskRoutes");
@@ -34,33 +35,39 @@ app.post("/api/payments/webhook", express.raw({ type: "application/json" }), asy
     );
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
-      const email = session.metadata?.buyer_email;
-      const coins = Number(session.metadata?.coins || 0);
-      if (email && coins) {
-        const user = await User.findOne({ email: email.toLowerCase() });
-        if (user) {
-          await Payment.updateOne(
-            { transaction_id: session.id },
-            {
-              $setOnInsert: {
-                buyer_email: email,
-                buyer_name: session.metadata?.buyer_name || "",
-                amount: (session.amount_total || 0) / 100,
-                coins,
-                currency: session.currency || "usd",
-                transaction_id: session.id,
-                status: "completed"
-              }
-            },
-            { upsert: true }
-          );
-          user.coin += coins;
-          await user.save();
-        }
+      if (session.payment_status !== "paid") return res.json({ received: true });
+
+      const email = session.metadata?.buyer_email?.toLowerCase();
+      const paymentPackage = findPaymentPackage(session.metadata?.amount, session.metadata?.coins);
+      if (!email || !paymentPackage || session.amount_total !== paymentPackage.amount * 100 ||
+          session.currency !== "usd") {
+        return res.status(400).json({ message: "Invalid checkout session metadata" });
+      }
+      const user = await User.findOne({ email });
+      if (!user) return res.status(404).json({ message: "Payment buyer was not found" });
+
+      const result = await Payment.updateOne(
+        { transaction_id: session.id },
+        {
+          $setOnInsert: {
+            buyer_email: email,
+            buyer_name: session.metadata?.buyer_name || "",
+            amount: paymentPackage.amount,
+            coins: paymentPackage.coins,
+            currency: "usd",
+            transaction_id: session.id,
+            status: "completed"
+          }
+        },
+        { upsert: true }
+      );
+      if (result.upsertedCount === 1) {
+        await User.updateOne({ _id: user._id }, { $inc: { coin: paymentPackage.coins } });
       }
     }
     res.json({ received: true });
   } catch (error) {
+    if (error.code === 11000) return res.json({ received: true });
     next(error);
   }
 });
