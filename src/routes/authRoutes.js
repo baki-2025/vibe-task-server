@@ -1,5 +1,6 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const getFirebaseAdmin = require("../config/firebase");
 const User = require("../models/User");
 const { authenticate } = require("../middleware/auth");
 const {
@@ -69,6 +70,50 @@ router.post("/login", async (req, res, next) => {
 
 router.post("/jwt", authenticate, (req, res) => {
   res.json({ token: createToken(req.user) });
+});
+
+router.post("/firebase", async (req, res, next) => {
+  try {
+    const firebase = getFirebaseAdmin();
+    if (!firebase) return res.status(503).json({ message: "Firebase authentication is not configured" });
+    if (typeof req.body.idToken !== "string" || !req.body.idToken) {
+      return res.status(400).json({ message: "Firebase ID token is required" });
+    }
+
+    const decoded = await firebase.auth().verifyIdToken(req.body.idToken);
+    const email = normalizeEmail(decoded.email);
+    if (!isValidEmail(email)) return res.status(401).json({ message: "Firebase account must include a valid email" });
+
+    const role = req.body.role || "worker";
+    if (!["worker", "buyer"].includes(role)) {
+      return res.status(400).json({ message: "Role must be worker or buyer" });
+    }
+
+    let user = await User.findOne({ email });
+    if (user && user.firebaseUid && user.firebaseUid !== decoded.uid) {
+      return res.status(409).json({ message: "Email is linked to a different Firebase account" });
+    }
+    if (!user) {
+      user = await User.create({
+        name: req.body.name || decoded.name || email,
+        email,
+        photoURL: req.body.photoURL || decoded.picture || "",
+        role,
+        coin: role === "buyer" ? 50 : 10,
+        firebaseUid: decoded.uid
+      });
+    } else if (!user.firebaseUid) {
+      user.firebaseUid = decoded.uid;
+      await user.save();
+    }
+
+    res.json({ token: createToken(user), user });
+  } catch (error) {
+    if (error.code === "auth/argument-error" || error.code === "auth/invalid-id-token") {
+      return res.status(401).json({ message: "Invalid Firebase ID token" });
+    }
+    next(error);
+  }
 });
 
 router.get("/me", authenticate, (req, res) => res.json(req.user));
