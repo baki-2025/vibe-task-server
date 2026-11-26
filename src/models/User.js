@@ -8,6 +8,14 @@ const userSchema = new mongoose.Schema({
   coin: { type: Number, default: 10, min: 0 },
   passwordHash: { type: String, select: false },
   firebaseUid: { type: String, default: "" }
-}, { timestamps: true });
+}, {
+  timestamps: true,
+  toJSON: {
+    transform(document, result) {
+      delete result.passwordHash;
+      return result;
+    }
+  }
+});
 
 module.exports = mongoose.model("User", userSchema);
