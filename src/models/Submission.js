@@ -14,5 +14,6 @@ const submissionSchema = new mongoose.Schema({
 
 submissionSchema.index({ worker_email: 1, createdAt: -1 });
 submissionSchema.index({ buyer_email: 1, status: 1 });
+submissionSchema.index({ task_id: 1, worker_email: 1 }, { unique: true });
 
 module.exports = mongoose.model("Submission", submissionSchema);
