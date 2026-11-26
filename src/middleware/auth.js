@@ -6,7 +6,7 @@ async function authenticate(req, res, next) {
   try {
     const header = req.headers.authorization || "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-    if (!token) return res.status(401).json({ message: "Unauthorized" });
+    if (!token) return res.status(401).json({ message: "Bearer token is required" });
 
     let payload;
     const firebase = getFirebaseAdmin();
@@ -17,18 +17,26 @@ async function authenticate(req, res, next) {
       } catch (_) {}
     }
     if (!payload) {
-      if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET is required");
-      payload = jwt.verify(token, process.env.JWT_SECRET);
+      if (!process.env.JWT_SECRET) {
+        return res.status(503).json({ message: "Authentication is not configured" });
+      }
+      try {
+        payload = jwt.verify(token, process.env.JWT_SECRET);
+      } catch (_) {
+        return res.status(401).json({ message: "Invalid or expired token" });
+      }
     }
 
-    if (!payload.email) return res.status(401).json({ message: "Unauthorized" });
+    if (typeof payload.email !== "string" || !payload.email) {
+      return res.status(401).json({ message: "Token does not identify a user" });
+    }
     const user = await User.findOne({ email: payload.email.toLowerCase() });
     if (!user) return res.status(401).json({ message: "User is not registered" });
     req.user = user;
-    next();
   } catch (error) {
-    res.status(401).json({ message: "Unauthorized", error: error.message });
+    return next(error);
   }
+  next();
 }
 
 function requireRole(...roles) {
